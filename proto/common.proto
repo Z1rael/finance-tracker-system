@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package finance.common;
+
+option go_package = "gen/go/common;common";
+
+import "google/protobuf/timestamp.proto";
+
+enum TransactionType {
+    TRANSACTION_TYPE_UNSPECIFIED = 0;
+    INCOME = 1;
+    EXPENSE = 2;
+    TRANSFER = 3;
+}
+
+enum TransactionCategory {
+    UNSPECIFIED = 0;
+    SALARY = 1;
+    ALLOWANCE = 2;
+    SALES = 3;
+    RENT = 4;
+    INSURANCE = 5;
+    SUBSCRIPTIONS = 6;
+    GROCERIES = 7;
+    FOOD = 8;
+    CLOTHING = 9;
+    RECREATION = 10;
+    TRAVEL = 11;
+    MISCELLANEOUS = 12;
+}
