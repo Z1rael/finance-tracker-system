@@ -1,0 +1,22 @@
+{
+    "name": "Tour Planner UI",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "target": "devel"
+    },
+    "runArgs": [
+        "--network=host"
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "Angular.ng-template",
+                "streetsidesoftware.code-spell-checker",
+                "dbaeumer.vscode-eslint",
+                "esbenp.prettier-vscode"
+            ]
+        }
+    },
+    "remoteUser": "node",
+    "postCreateCommand": "npm install"
+}
