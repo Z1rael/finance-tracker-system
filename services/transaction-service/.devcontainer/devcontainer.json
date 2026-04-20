@@ -1,0 +1,31 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/cpp
+{
+    "name": "Transaction Service",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "target": "development"
+    },
+    "workspaceFolder": "/app",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind",
+    "runArgs": [
+        "--network=host"
+    ],
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "go.useLanguageServer": true,
+                "go.toolsManagement.autoUpdate": true
+            },
+            "extensions": [
+                "golang.Go",
+                "ms-azuretools.vscode-docker",
+                "bierner.markdown-preview-github-styles",
+                "streetsidesoftware.code-spell-checker",
+                "gruntfuggly.todo-tree",
+                "esbenp.prettier-vscode"
+            ]
+        }
+    },
+    "remoteUser": "devel"
+}
