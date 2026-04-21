@@ -1,66 +1,200 @@
 package repository
 
 import (
+	"context"
 	"finance-tracker-system/transaction-service/internal/model"
-	"sync"
+	"log"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TODO: Need to implement this for a database
-
-type TransactionRepository interface {
-	Create(t *model.Transaction) (*model.Transaction, error)
-	List(accountID int64) ([]*model.Transaction, error)
-	Delete(id int64) error
+type TransactionRepository struct {
+	db *pgxpool.Pool
 }
 
-type InMemoryTransactionRepository struct {
-	mu           sync.Mutex
-	transactions map[int64]*model.Transaction
-	nextID       int64
-}
-
-func NewInMemoryTransactionRepository() *InMemoryTransactionRepository {
-	return &InMemoryTransactionRepository{
-		transactions: make(map[int64]*model.Transaction),
-		nextID:       1,
+func NewPostgresPool(connString string) *pgxpool.Pool {
+	pool, err := pgxpool.New(context.Background(), connString)
+	if err != nil {
+		log.Fatalf("Unable to connect to database: %v\n", err)
 	}
+
+	return pool
 }
 
-// TODO: error handling when db implementatin is done
-func (repo *InMemoryTransactionRepository) Create(t *model.Transaction) (*model.Transaction, error) {
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
+func NewTransactionRepository(db *pgxpool.Pool) *TransactionRepository {
+	return &TransactionRepository{db: db}
+}
 
-	t.ID = repo.nextID
-	repo.nextID++
-	repo.transactions[t.ID] = t
+func (repo *TransactionRepository) Create(
+	ctx context.Context,
+	t *model.Transaction,
+) (*model.Transaction, error) {
+	transaction, err := repo.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer transaction.Rollback(ctx)
+
+	// insert transaction
+	query := `
+		INSERT INTO transactions (account_id, amount, description, category, transaction_type)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, created_at
+	`
+
+	err = transaction.QueryRow(ctx, query,
+		t.AccountID,
+		t.Amount,
+		t.Description,
+		t.Category,
+		t.Type,
+	).Scan(&t.ID, &t.Timestamp)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// update account
+	_, err = transaction.Exec(ctx, `
+		UPDATE accounts
+		SET balance = balance + $1,
+		updated_at = NOW()
+		WHERE id = $2
+	`, t.Amount, t.AccountID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// commit transaction
+	if err := transaction.Commit(ctx); err != nil {
+		return nil, err
+	}
 
 	return t, nil
 }
 
-// TODO: error handling still missing
-func (repo *InMemoryTransactionRepository) List(accountID int64) ([]*model.Transaction, error) {
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
+func (repo *TransactionRepository) Transfer(
+	ctx context.Context,
+	fromAccountId int64,
+	toAccountId int64,
+	amount int64,
+	description string,
+	category int32,
+) error {
+	transaction, err := repo.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback(ctx)
 
-	var transactions []*model.Transaction
-	for _, t := range repo.transactions {
-		if t.AccountID == accountID {
-			transactions = append(transactions, t)
-		}
+	// deduct from source
+	_, err = transaction.Exec(ctx, `
+		INSERT INTO transactions (account_id, amount, description, category, transaction_type)
+		VALUES ($1, $2, $3, $4, $5)
+	`, fromAccountId, -amount, description, category, 3) // Transfer
+
+	if err != nil {
+		return err
 	}
 
-	return transactions, nil
+	// add to destination
+	_, err = transaction.Exec(ctx, `
+		INSERT INTO transactions (account_id, amount, description, category, transaction_type)
+		VALUES ($1, $2, $3, $4, $5)
+	`, toAccountId, amount, description, category, 3)
+
+	if err != nil {
+		return err
+	}
+
+	// update accounts
+	_, err = transaction.Exec(ctx, `
+		UPDATE accounts SET balance = balance - $1,
+		updated_at = NOW()
+		WHERE id = $2
+	`, amount, fromAccountId)
+	if err != nil {
+		return err
+	}
+
+	_, err = transaction.Exec(ctx, `
+		UPDATE accounts SET balance = balance + $1,
+		updated_at = NOW()
+		WHERE id = $2
+	`, amount, toAccountId)
+	if err != nil {
+		return err
+	}
+
+	return transaction.Commit(ctx)
 }
 
-// TODO: this does not work, easier to just implement with real db
-func (repo *InMemoryTransactionRepository) Delete(id int64) error {
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
+func (repo *TransactionRepository) List(
+	ctx context.Context,
+	accountID int64,
+) ([]*model.Transaction, error) {
 
-	delete(repo.transactions, id)
+	transaction, err := repo.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer transaction.Rollback(ctx)
 
-	return nil
+	// get List
+	rows, err := transaction.Query(ctx, `
+		SELECT id, account_id, amount, description, category, transaction_type, created_at
+		FROM transactions
+		WHERE account_id = $1
+		ORDER BY created_at DESC
+	`, accountID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []*model.Transaction
+
+	for rows.Next() {
+		var t model.Transaction
+		err := rows.Scan(
+			&t.ID,
+			&t.AccountID,
+			&t.Amount,
+			&t.Description,
+			&t.Category,
+			&t.Type,
+			&t.Timestamp,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, &t)
+	}
+
+	return result, nil
+}
+
+func (repo *TransactionRepository) Delete(
+	ctx context.Context,
+	id int64,
+) error {
+	transaction, err := repo.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback(ctx)
+
+	_, err = transaction.Exec(ctx, `
+		DELETE FROM transactions WHERE id = $1
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	return transaction.Commit(ctx)
 }
 
 // TODO: extend repo to also update transactions

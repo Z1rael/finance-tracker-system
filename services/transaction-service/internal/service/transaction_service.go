@@ -1,16 +1,17 @@
 package service
 
 import (
+	"context"
 	"finance-tracker-system/transaction-service/internal/model"
 	"finance-tracker-system/transaction-service/internal/repository"
 	"time"
 )
 
 type TransactionService struct {
-	repo repository.TransactionRepository
+	repo *repository.TransactionRepository
 }
 
-func NewTransactionService(r repository.TransactionRepository) *TransactionService {
+func NewTransactionService(r *repository.TransactionRepository) *TransactionService {
 	return &TransactionService{repo: r}
 }
 
@@ -31,13 +32,23 @@ func (service *TransactionService) CreateTransaction(
 		Timestamp:   timestamp,
 	}
 
-	return service.repo.Create(t)
+	return service.repo.Create(context.Background(), t)
+}
+
+func (service *TransactionService) TransferTransaction(
+	fromAccountId int64,
+	toAccountId int64,
+	amount int64,
+	description string,
+	category int32,
+) error {
+	return service.repo.Transfer(context.Background(), fromAccountId, toAccountId, amount, description, category)
 }
 
 func (service *TransactionService) ListTransactions(accountID int64) ([]*model.Transaction, error) {
-	return service.repo.List(accountID)
+	return service.repo.List(context.Background(), accountID)
 }
 
 func (service *TransactionService) DeleteTransaction(id int64) error {
-	return service.DeleteTransaction(id)
+	return service.repo.Delete(context.Background(), id)
 }
