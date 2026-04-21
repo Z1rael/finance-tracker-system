@@ -177,6 +177,77 @@ func (repo *TransactionRepository) List(
 	return result, nil
 }
 
+func (repo *TransactionRepository) Update(
+	ctx context.Context,
+	id int64,
+	newAmount int64,
+	newDescription string,
+	newCategory int32,
+	newType int32,
+) (*model.Transaction, error) {
+
+	transaction, err := repo.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer transaction.Rollback(ctx)
+
+	var oldAmount int64
+	var accountID int64
+
+	// fetch current transaction
+	err = transaction.QueryRow(ctx, `
+		SELECT amount, account_id
+		FROM transactions
+		WHERE id = $1
+	`, id).Scan(&oldAmount, &accountID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// calculate delta
+	delta := newAmount - oldAmount
+
+	// update transaction
+	var updated model.Transaction
+
+	err = transaction.QueryRow(ctx, `
+		UPDATE transactions
+		SET amount = $1,
+			description = $2,
+			category = $3,
+			transaction_type = $4
+		WHERE id = $5
+		RETURNING id, account_id, amount, description, category, transaction_type, created_at
+	`, newAmount, newDescription, newCategory, newType, id).Scan(
+		&updated.ID,
+		&updated.AccountID,
+		&updated.Amount,
+		&updated.Description,
+		&updated.Category,
+		&updated.Type,
+		&updated.Timestamp,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// update account balance
+	_, err = transaction.Exec(ctx, `
+		UPDATE accounts
+		SET balance = balance + $1,
+			updated_at = NOW()
+		WHERE id = $2
+	`, delta, accountID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &updated, transaction.Commit(ctx)
+}
+
 func (repo *TransactionRepository) Delete(
 	ctx context.Context,
 	id int64,

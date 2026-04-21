@@ -49,6 +49,16 @@ func (service *TransactionService) ListTransactions(accountID int64) ([]*model.T
 	return service.repo.List(context.Background(), accountID)
 }
 
+func (service *TransactionService) UpdateTransaction(
+	id int64,
+	newAmount int64,
+	newDescription string,
+	newCategory int32,
+	newType int32,
+) (*model.Transaction, error) {
+	return service.repo.Update(context.Background(), id, newAmount, newDescription, newCategory, newType)
+}
+
 func (service *TransactionService) DeleteTransaction(id int64) error {
 	return service.repo.Delete(context.Background(), id)
 }

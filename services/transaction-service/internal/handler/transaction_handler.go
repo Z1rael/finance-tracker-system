@@ -48,6 +48,22 @@ func (handler *TransactionHandler) CreateTransaction(
 	}, nil
 }
 
+func (handler *TransactionHandler) TransferTransaction(
+	ctx context.Context,
+	req *pb.TransferTransactionRequest,
+) (*pb.TransferTransactionResponse, error) {
+
+	err := handler.service.TransferTransaction(
+		req.FromAccountId,
+		req.ToAccountId,
+		req.Amount,
+		req.Description,
+		int32(req.Category),
+	)
+
+	return nil, err
+}
+
 func (handler *TransactionHandler) ListTransactions(
 	ctx context.Context,
 	req *pb.ListTransactionsRequest,
@@ -72,6 +88,34 @@ func (handler *TransactionHandler) ListTransactions(
 
 	return &pb.ListTransactionsResponse{
 		Transactions: result,
+	}, nil
+}
+
+func (handler *TransactionHandler) UpdateTransaction(
+	ctx context.Context,
+	req *pb.UpdateTransactionRequest,
+) (*pb.UpdateTransactionResponse, error) {
+	t, err := handler.service.UpdateTransaction(
+		req.Id,
+		req.NewAmount,
+		req.NewDescription,
+		int32(req.NewCategory),
+		int32(req.NewType),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.UpdateTransactionResponse{
+		Transaction: &pb.Transaction{
+			Id:              t.ID,
+			AccountId:       t.AccountID,
+			Amount:          t.Amount,
+			Description:     t.Description,
+			Category:        pb.TransactionCategory(t.Category),
+			TransactionType: pb.TransactionType(t.Type),
+			Timestamp:       timestamppb.New(t.Timestamp),
+		},
 	}, nil
 }
 
