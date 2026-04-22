@@ -258,9 +258,35 @@ func (repo *TransactionRepository) Delete(
 	}
 	defer transaction.Rollback(ctx)
 
+	var amount int64
+	var accountID int64
+
+	// fetch transaction
+	err = transaction.QueryRow(ctx, `
+		SELECT amount, account_id
+		FROM transactions
+		WHERE id = $1
+	`, id).Scan(&amount, &accountID)
+
+	if err != nil {
+		return err
+	}
+
+	// delete transaction
 	_, err = transaction.Exec(ctx, `
 		DELETE FROM transactions WHERE id = $1
 	`, id)
+	if err != nil {
+		return err
+	}
+
+	// update account balance
+	_, err = transaction.Exec(ctx, `
+		UPDATE accounts
+		SET balance = balance - $1,
+			updated_at = NOW()
+		WHERE id = $2
+	`, amount, accountID)
 	if err != nil {
 		return err
 	}
